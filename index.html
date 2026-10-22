@@ -1,0 +1,1054 @@
+<!doctype html>
+<html lang="kk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Құпия есік · 3D квест</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;800&display=swap">
+<style>
+/* Панель: толық экран 3D, үстінде киіз-түсті тақтайшалар */
+:root{
+  --ink:#f4ead8; --dim:#c9bea6; --bg:#14322e; --card:rgba(16,38,34,.9); --ochre:#e3a63b; --red:#c4553a;
+  --p1:#3d8bd9; --p2:#e2763a; --line:rgba(244,234,216,.18);
+  --f:"Rubik","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d1f1c;color:var(--ink);font-family:var(--f)}
+[hidden]{display:none!important}
+canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+
+/* ойыншының жарты экраны */
+.half{position:fixed;top:0;bottom:0;pointer-events:none;overflow:hidden}
+.half.solo{left:0!important;width:100%!important}
+#h1{left:0;width:50%}
+#h2{left:50%;width:50%;border-left:4px solid #0d1f1c}
+.tag{position:absolute;top:14px;left:14px;display:flex;align-items:center;gap:8px;background:var(--card);border-radius:30px;padding:5px 14px 5px 5px;font-weight:600;font-size:15px}
+.tag i{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:800;color:#fff}
+.tag small{color:var(--dim);font-weight:400}
+#h2:not(.solo) .tag{left:auto;right:14px}
+#h2:not(.solo) .holding{left:auto;right:14px}
+.cross{position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px;border-radius:50%;border:2px solid rgba(255,255,255,.75);box-shadow:0 0 0 1px rgba(0,0,0,.3)}
+.prompt{position:absolute;left:50%;top:calc(50% + 30px);transform:translateX(-50%);background:var(--ochre);color:#2a1d08;font-weight:800;padding:6px 14px;border-radius:6px;font-size:16px;white-space:nowrap;box-shadow:0 3px 0 #9b6c1a}
+.holding{position:absolute;left:14px;top:60px;background:var(--card);border:2px solid var(--ochre);border-radius:8px;padding:6px 12px;font-weight:600}
+.hint{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);background:var(--card);padding:8px 16px;border-radius:8px;font-weight:600;font-size:17px;white-space:nowrap}
+.blind{position:absolute;inset:0;background:#0b1715;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:20px}
+.blind b{font-size:clamp(22px,3vw,40px)}
+.blind span{font-size:clamp(48px,8vw,110px);font-weight:800;color:var(--ochre);font-variant-numeric:tabular-nums}
+.blind small{color:var(--dim);font-size:16px}
+.lost{position:absolute;left:50%;top:70px;transform:translateX(-50%);background:var(--red);padding:6px 14px;border-radius:6px;font-weight:600}
+
+/* жоғарғы орталық тақта */
+#top{position:fixed;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:stretch;z-index:3;pointer-events:none}
+#top > div{background:var(--card);border-radius:10px;padding:6px 14px;display:flex;flex-direction:column;justify-content:center}
+#clock{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ochre);min-width:96px;text-align:center}
+#topInfo{font-size:14px;color:var(--dim);max-width:280px}
+#topInfo b{color:var(--ink);font-size:16px}
+#miniQR{padding:5px!important;background:#f4ead8!important;pointer-events:auto}
+#miniQR svg{width:64px;height:64px;display:block}
+
+/* үстелдегі төрт орын */
+#tableHud{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:10px;z-index:3;pointer-events:none}
+.slot{width:150px;background:var(--card);border:2px dashed var(--line);border-radius:10px;padding:8px 10px;text-align:center}
+.slot .n{font-size:12px;color:var(--dim);letter-spacing:.06em}
+.slot .nm{font-weight:600;font-size:15px;margin:2px 0}
+.slot .pz{font-size:20px;font-weight:800;color:var(--ochre);min-height:26px}
+.slot.on{border-style:solid;border-color:var(--ochre);background:rgba(40,52,30,.94)}
+.slot.on .pz{animation:pop .5s}
+@keyframes pop{0%{transform:scale(.4)}70%{transform:scale(1.15)}100%{transform:scale(1)}}
+.solo-hud #tableHud{bottom:16px}
+
+/* лобби */
+#lobby{position:fixed;inset:0;z-index:5;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:28px;padding:clamp(18px,4vw,56px);background:linear-gradient(100deg,rgba(13,31,28,.93) 30%,rgba(13,31,28,.6));overflow:auto}
+.brand small{display:block;color:var(--ochre);font-weight:600;letter-spacing:.14em;text-transform:uppercase;font-size:13px;margin-bottom:6px}
+.brand h1{margin:0;font-size:clamp(40px,6vw,84px);line-height:.95;font-weight:800;letter-spacing:-.01em}
+.brand h1 em{font-style:normal;color:var(--ochre)}
+.brand p{color:var(--dim);font-size:18px;max-width:520px;line-height:1.45}
+.orn{height:18px;margin:18px 0;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='18' viewBox='0 0 44 18'%3E%3Cpath d='M2 16 C2 6 10 2 14 6 C18 10 12 14 10 10 M42 16 C42 6 34 2 30 6 C26 10 32 14 34 10 M14 16 L30 16' fill='none' stroke='%23e3a63b' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x;opacity:.75;max-width:520px}
+.modeCards{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:560px}
+.mc{background:rgba(0,0,0,.25);border:2px solid var(--line);border-radius:14px;padding:16px;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.mc h3{margin:0 0 6px;font-size:22px}
+.mc p{margin:0;color:var(--dim);font-size:14px;line-height:1.4}
+.mc.sel{border-color:var(--ochre);background:rgba(227,166,59,.12);transform:rotate(-.6deg)}
+.qrcard{align-self:center;justify-self:center;background:#f4ead8;color:#1d2b28;border-radius:18px;padding:22px 22px 18px;width:min(420px,100%);box-shadow:0 10px 0 rgba(0,0,0,.3);transform:rotate(1deg)}
+.qrcard h2{margin:0 0 4px;font-size:22px}
+.qrcard .sub{margin:0 0 12px;color:#5d5a4e;font-size:15px}
+#qr{background:#fff;border-radius:10px;padding:10px;display:grid;place-items:center;min-height:260px}
+#qr svg{width:100%;height:auto;max-width:340px;display:block}
+.room{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:14px;color:#5d5a4e}
+.room b{font-size:24px;letter-spacing:.18em;color:#1d2b28}
+.players{display:flex;gap:10px;margin-top:12px}
+.pl{flex:1;border-radius:10px;padding:10px;background:#e6dcc6;font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px}
+.pl i{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#fff;font-style:normal;font-weight:800;opacity:.35}
+.pl.on i{opacity:1}
+.pl small{display:block;font-weight:400;color:#6b675b;font-size:12px}
+.actions{display:flex;gap:12px;margin-top:22px;flex-wrap:wrap;align-items:center}
+.btn{border:0;border-radius:12px;background:var(--ochre);color:#2a1d08;font:800 20px var(--f);padding:14px 28px;cursor:pointer;box-shadow:0 4px 0 #9b6c1a}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 #9b6c1a}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.ghost{background:transparent;color:var(--ink);box-shadow:none;border:2px solid var(--line);font-size:15px;padding:10px 16px}
+#netState{font-size:14px;color:var(--dim)}
+.warn{color:#ffb38f}
+
+/* хабар және соңғы экран */
+#toast{position:fixed;left:50%;top:96px;transform:translateX(-50%);background:#f4ead8;color:#1d2b28;padding:10px 20px;border-radius:10px;font-weight:600;font-size:18px;z-index:6;box-shadow:0 5px 0 rgba(0,0,0,.3);transition:opacity .3s;opacity:0;pointer-events:none;max-width:90vw;text-align:center}
+#toast.show{opacity:1}
+#endS{position:fixed;inset:0;z-index:7;background:rgba(13,31,28,.82);display:grid;place-items:center}
+#endS .card{background:#f4ead8;color:#1d2b28;border-radius:18px;padding:30px 36px;max-width:560px;width:calc(100% - 32px);text-align:center;box-shadow:0 10px 0 rgba(0,0,0,.3)}
+#endS h2{margin:0 0 8px;font-size:36px}
+#endS p{font-size:18px;color:#4c4a40;line-height:1.45}
+#endS .actions{justify-content:center}
+#endS .ghost{color:#1d2b28;border-color:#cfc4ab}
+
+/* панельдегі код тергіш (пернетақта ойыншысына) */
+#pkp{position:fixed;inset:0;z-index:8;background:rgba(10,24,21,.85);display:grid;place-items:center}
+#pkp .card{background:#f4ead8;color:#1d2b28;border-radius:16px;padding:20px;text-align:center}
+#pkpVal{font-size:40px;font-weight:800;letter-spacing:.3em;margin:6px 0 12px;min-height:48px}
+#pkp .keys{display:grid;grid-template-columns:repeat(3,72px);gap:8px}
+#pkp .keys button{height:58px;border:0;border-radius:10px;background:#1d2b28;color:#f4ead8;font:800 24px var(--f);cursor:pointer}
+
+/* толық экран батырмасы */
+#fsBtn{position:fixed;left:12px;bottom:12px;z-index:9;display:flex;align-items:center;gap:8px;border:2px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:600 14px var(--f);padding:8px 12px;cursor:pointer;opacity:.75;transition:opacity .2s}
+#fsBtn:hover{opacity:1}
+#fsBtn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
+.kbhelp{position:fixed;right:12px;bottom:118px;z-index:3;background:var(--card);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--dim);line-height:1.5;pointer-events:none}
+@media (max-width:900px){#lobby{grid-template-columns:1fr}.slot{width:110px}.slot .pz{font-size:16px}}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div class="half" id="h1" hidden></div>
+<div class="half" id="h2" hidden></div>
+
+<div id="top" hidden>
+  <div id="clock">0:00</div>
+  <div id="topInfo"></div>
+  <div id="miniQR" title="Қайта қосылу үшін"></div>
+</div>
+<div id="tableHud" hidden></div>
+<div class="kbhelp" id="kbhelp" hidden></div>
+
+<section id="lobby">
+  <div>
+    <div class="brand">
+      <small>Екі қабатты үй · 3D</small>
+      <h1>Құпия <em>есік</em></h1>
+      <div class="orn"></div>
+      <p>Үйдің бөлмелерін аралап, жасырылған заттарды тап. Оларды үстелге жина — әр заттың астынан бір сан шығады. Төрт сан — сыртқы есіктің коды.</p>
+    </div>
+    <div class="modeCards">
+      <button class="mc sel" data-mode="quest"><h3>Квест</h3><p>1–2 ойыншы бірге. Төрт затты тауып, есікті ашыңдар.</p></button>
+      <button class="mc" data-mode="hide"><h3>Жасырынбақ</h3><p>1–2 ойыншы. Біреуі тығылады, екіншісі 2 минутта іздейді. Жалғыз болсаң — компьютер тығылады.</p></button>
+    </div>
+    <div class="actions">
+      <button class="btn" id="startBtn" disabled>Бастау</button>
+      <button class="btn ghost" id="kbBtn">+ пернетақта ойыншысы</button>
+    </div>
+    <p id="netState">Байланыс орнатылып жатыр…</p>
+  </div>
+  <div class="qrcard">
+    <h2>Телефонмен сканерле</h2>
+    <p class="sub">Телефон — сенің джойстигің. Екі адам қосыла алады.</p>
+    <div id="qr"><span style="color:#888">QR дайындалып жатыр…</span></div>
+    <div class="room"><span>Бөлме коды</span><b id="roomCode">·····</b></div>
+    <div class="players">
+      <div class="pl" id="pl1"><i style="background:var(--p1)">1</i><div><span>1-ойыншы</span><small>күтуде</small></div></div>
+      <div class="pl" id="pl2"><i style="background:var(--p2)">2</i><div><span>2-ойыншы</span><small>күтуде</small></div></div>
+    </div>
+  </div>
+</section>
+
+<button id="fsBtn" title="Толық экран (F11)" hidden><svg viewBox="0 0 24 24"><path id="fsIco" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span id="fsTxt">Толық экран</span></button>
+<div id="toast"></div>
+<div id="endS" hidden><div class="card"><h2 id="endT"></h2><p id="endP"></p><div class="actions"><button class="btn" id="againBtn">Қайта ойнау</button><button class="btn ghost" id="menuBtn">Мәзірге</button></div></div></div>
+<div id="pkp" hidden><div class="card"><b>Есіктің коды</b><div id="pkpVal"></div><div class="keys"></div></div></div>
+
+<script src="three.min.js"></script>
+<script src="mqtt.min.js"></script>
+<script src="qrcode.min.js"></script>
+<script src="net.js"></script>
+<script>
+/* ================================================================
+   ҚҰПИЯ ЕСІК — панель (үлкен экран)
+   Бөлімдер: құралдар · текстуралар · үй · заттар · ойыншылар ·
+             квест · жасырынбақ · желі · лобби · цикл
+   ================================================================ */
+const $ = id => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const ri = (a, b) => Math.floor(rnd(a, b + 1));
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = ri(0, i); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const H = 3.2;            // бір қабаттың биіктігі
+const COLORS = ['#3d8bd9', '#e2763a'];
+
+let toastT;
+function toast(t, ms = 2600) { const e = $('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('show'), ms); }
+function fmt(s) { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+
+/* ---------- дыбыс ---------- */
+let AC = null;
+function tone(f, d = .12, type = 'square', v = .06, slide = 0) {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime;
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(f * slide, t + d);
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+    o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + .02);
+  } catch (e) {}
+}
+const SFX = {
+  pick() { tone(520, .1, 'triangle', .09, 1.6); },
+  place() { tone(180, .18, 'sine', .14, .6); setTimeout(() => tone(660, .12, 'triangle', .07), 90); },
+  wrong() { tone(140, .35, 'sawtooth', .06, .8); },
+  open() { [392, 494, 587, 784].forEach((f, i) => setTimeout(() => tone(f, .25, 'triangle', .08), i * 110)); },
+  tick() { tone(880, .05, 'square', .03); },
+  found() { [784, 659, 523].forEach((f, i) => setTimeout(() => tone(f, .2, 'square', .06), i * 120)); },
+  join() { tone(440, .08, 'triangle', .07, 1.5); }
+};
+
+/* ---------- текстуралар (бәрі кодпен салынады) ---------- */
+function cnv(w, h, fn) { const c = document.createElement('canvas'); c.width = w; c.height = h; fn(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t; }
+function rep(t, x, y) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(x, y); return t; }
+function noise(g, w, h, a, n = 900) { for (let i = 0; i < n; i++) { g.fillStyle = `rgba(${Math.random() < .5 ? '0,0,0' : '255,255,255'},${Math.random() * a})`; g.fillRect(Math.random() * w, Math.random() * h, 2, 2); } }
+
+const TX = {
+  wood: rep(cnv(256, 256, (g, w, h) => {
+    for (let i = 0; i < 8; i++) {
+      const l = ri(-12, 12);
+      g.fillStyle = `hsl(28,${42 + l / 2}%,${40 + l}%)`; g.fillRect(0, i * 32, w, 32);
+      for (let k = 0; k < 14; k++) { g.strokeStyle = 'rgba(60,30,10,.18)'; g.beginPath(); const y = i * 32 + rnd(3, 29); g.moveTo(0, y); g.bezierCurveTo(80, y + rnd(-3, 3), 170, y + rnd(-3, 3), w, y); g.stroke(); }
+      g.fillStyle = 'rgba(30,15,5,.55)'; g.fillRect(0, i * 32, w, 2); g.fillRect(ri(30, 220), i * 32, 2, 32);
+    }
+  }), 5, 5),
+  tile: rep(cnv(128, 128, (g, w, h) => {
+    for (let x = 0; x < 4; x++) for (let y = 0; y < 4; y++) { g.fillStyle = (x + y) % 2 ? '#e9e2d0' : '#4d7f78'; g.fillRect(x * 32, y * 32, 32, 32); }
+    g.strokeStyle = 'rgba(0,0,0,.25)'; for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(i * 32, 0); g.lineTo(i * 32, h); g.moveTo(0, i * 32); g.lineTo(w, i * 32); g.stroke(); }
+    noise(g, w, h, .06, 300);
+  }), 4, 4),
+  plaster: cnv(128, 128, (g, w, h) => { g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); noise(g, w, h, .07, 1400); }),
+  carpet: cnv(512, 512, (g, w, h) => {
+    /* қызыл кілем, шетінде қошқар мүйіз ою */
+    g.fillStyle = '#8f2a22'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#1f3d5c'; g.fillRect(24, 24, w - 48, h - 48);
+    g.fillStyle = '#a8332a'; g.fillRect(70, 70, w - 140, h - 140);
+    g.strokeStyle = '#e8b54a'; g.lineWidth = 7; g.lineCap = 'round';
+    const horn = (x, y, s, r) => { g.save(); g.translate(x, y); g.rotate(r); g.scale(s, s); g.beginPath(); g.moveTo(-20, 10); g.bezierCurveTo(-20, -18, -2, -22, -4, -6); g.bezierCurveTo(-5, 2, -14, 0, -12, -6); g.moveTo(20, 10); g.bezierCurveTo(20, -18, 2, -22, 4, -6); g.bezierCurveTo(5, 2, 14, 0, 12, -6); g.moveTo(-20, 10); g.lineTo(20, 10); g.stroke(); g.restore(); };
+    for (let i = 0; i < 8; i++) { const p = 60 + i * 56; horn(p, 47, .7, 0); horn(p, h - 47, .7, Math.PI); horn(47, p, .7, -Math.PI / 2); horn(w - 47, p, .7, Math.PI / 2); }
+    horn(w / 2, h / 2, 3.2, 0); horn(w / 2, h / 2 + 4, 3.2, Math.PI);
+    g.lineWidth = 4; g.strokeStyle = '#f2e3c2'; g.strokeRect(70, 70, w - 140, h - 140);
+    noise(g, w, h, .12, 4000);
+  }),
+  books: rep(cnv(256, 128, (g, w, h) => {
+    g.fillStyle = '#4a2f1c'; g.fillRect(0, 0, w, h);
+    for (let row = 0; row < 2; row++) { let x = 4; while (x < w - 6) { const bw = ri(7, 16), bh = ri(42, 58); g.fillStyle = pick(['#7a2c25', '#2f5a7a', '#c99a3b', '#3e6b3a', '#5b3a6e', '#d9cfb8', '#8a4a20']); g.fillRect(x, row * 64 + 62 - bh, bw, bh); g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(x + 2, row * 64 + 62 - bh + 6, bw - 4, 2); x += bw + 1; } g.fillStyle = '#2b1a0f'; g.fillRect(0, row * 64 + 61, w, 4); }
+  }), 3, 1),
+  sky: cnv(64, 64, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#9fd4f2'); gr.addColorStop(1, '#e8f6fb'); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = 'rgba(255,255,255,.8)'; g.beginPath(); g.ellipse(20, 22, 12, 5, 0, 0, 7); g.ellipse(30, 20, 9, 6, 0, 0, 7); g.fill(); }),
+  grass: rep(cnv(128, 128, (g, w, h) => { g.fillStyle = '#6a9a45'; g.fillRect(0, 0, w, h); for (let i = 0; i < 600; i++) { g.fillStyle = `hsl(${ri(80, 105)},45%,${ri(28, 45)}%)`; g.fillRect(rnd(0, w), rnd(0, h), 2, ri(3, 6)); } }), 30, 30),
+  halo: cnv(64, 64, (g, w, h) => { const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,230,140,.95)'); gr.addColorStop(.35, 'rgba(255,200,80,.4)'); gr.addColorStop(1, 'rgba(255,200,80,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); })
+};
+function label(text, opt = {}) {
+  const w = opt.w || 512, h = opt.h || 128;
+  return cnv(w, h, (g) => {
+    g.fillStyle = opt.bg || '#1d3b36'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = opt.fg || '#e3a63b'; g.lineWidth = 6; g.strokeRect(8, 8, w - 16, h - 16);
+    g.fillStyle = opt.fg || '#f4ead8'; g.font = `600 ${opt.size || 56}px Rubik, Segoe UI, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, w / 2, h / 2 + 3);
+  });
+}
+
+/* ---------- сахна ---------- */
+const canvas = $('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#a9d8ef');
+scene.add(new THREE.HemisphereLight(0xfff3dc, 0x5d4a3a, .85));
+scene.add(new THREE.AmbientLight(0xffffff, .28));
+const sun = new THREE.DirectionalLight(0xfff0d0, .35); sun.position.set(-6, 12, -8); scene.add(sun);
+
+const M = {};
+function mat(key, opt) { return M[key] || (M[key] = new THREE.MeshLambertMaterial(opt)); }
+const solids = [];    // соқтығысу қораптары {x1,z1,x2,z2,y1,y2}
+const blockers = [];  // көзге кедергі (жасырынбақта көру сызығы)
+
+/* B: бұрыштары бойынша қорап. o.solid=false — арқылы өтуге болады */
+function B(x1, y1, z1, x2, y2, z2, m, o = {}) {
+  const g = new THREE.BoxGeometry(x2 - x1, y2 - y1, z2 - z1);
+  if (o.uv) { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * o.uv[0], uv.getY(i) * o.uv[1]); }
+  const mesh = new THREE.Mesh(g, m);
+  mesh.position.set((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2);
+  (o.parent || scene).add(mesh);
+  if (o.solid !== false) { const s = { x1, z1, x2, z2, y1, y2, mesh }; solids.push(s); mesh.userData.solid = s; }
+  if (o.block !== false) blockers.push(mesh);
+  return mesh;
+}
+function plane(w, h, m, x, y, z, ry = 0, rx = 0) { const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m); p.position.set(x, y, z); p.rotation.set(rx, ry, 0); scene.add(p); return p; }
+
+/* бөлмелердің түсі */
+const wallMat = c => mat('w' + c, { color: c, map: TX.plaster });
+const RM = {
+  kitchen: wallMat('#e9d49a'), living: wallMat('#9cc3b6'), hall: wallMat('#e8dcc4'), library: wallMat('#b7826a'),
+  bedroom: wallMat('#d8b4c0'), study: wallMat('#a9c48d'), kids: wallMat('#9fc6e6'), outer: wallMat('#d7c9ac')
+};
+const woodM = mat('wood', { map: TX.wood }), tileM = mat('tile', { map: TX.tile });
+const darkWood = mat('dw', { color: '#6b4127' }), lightWood = mat('lw', { color: '#b98a5a' }), white = mat('wh', { color: '#efe9dc' });
+const ceilM = mat('ceil', { color: '#f3eee3' });
+
+/* Қабырға: ось бойы кесінді, есік ойықтарымен.
+   axis 'x' — x бойымен созылады (z тұрақты), 'z' — z бойымен (x тұрақты) */
+function wall(axis, fixed, a, b, floor, m, gaps = [], o = {}) {
+  const t = .075, y0 = floor * H, y1 = y0 + (o.h || (floor === 0 ? 3.0 : H)), top = y0 + 2.3;
+  let cur = a;
+  const seg = (s, e, ya, yb, solid = true) => {
+    if (e - s < .01) return;
+    if (axis === 'x') B(s, ya, fixed - t, e, yb, fixed + t, m, { solid });
+    else B(fixed - t, ya, s, fixed + t, yb, e, m, { solid });
+  };
+  for (const [g0, g1] of gaps) { seg(cur, g0, y0, y1); seg(g0, g1, top, y1); cur = g1; }
+  seg(cur, b, y0, y1);
+}
+
+/* ---- үй ---- */
+function buildHouse() {
+  /* жер және аула */
+  const gr = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), mat('grass', { map: TX.grass }));
+  gr.rotation.x = -Math.PI / 2; gr.position.y = -.03; scene.add(gr);
+  for (let i = 0; i < 14; i++) {
+    const x = rnd(-14, 34), z = rnd(-26, -5);
+    B(x - .15, 0, z - .15, x + .15, 1.4, z + .15, darkWood, { solid: false, block: false });
+    const c = new THREE.Mesh(new THREE.ConeGeometry(rnd(1, 1.6), rnd(2.4, 3.6), 7), mat('tree', { color: '#3f7a3c' }));
+    c.position.set(x, 2.6, z); scene.add(c);
+  }
+  B(4, -.02, -3, 16, .02, -.2, mat('path', { color: '#c9b48c' }), { solid: false, block: false });
+
+  /* едендер */
+  B(0, -.1, 0, 7, 0, 7, tileM, { solid: false, uv: [7 / 4, 7 / 4] });
+  B(0, -.1, 7, 20, 0, 14, woodM, { solid: false, uv: [1, 1] });
+  B(7, -.1, 0, 20, 0, 7, woodM, { solid: false });
+  const slab = (x1, z1, x2, z2) => { B(x1, H - .2, z1, x2, H, z2, woodM, { solid: false }); const c = B(x1, H - .21, z1, x2, H - .2, z2, ceilM, { solid: false, block: false }); };
+  slab(0, 0, 11, 14); slab(13, 0, 20, 14); slab(11, 0, 13, 4); slab(11, 11, 13, 14);
+  B(0, 2 * H, 0, 20, 2 * H + .2, 14, ceilM, { solid: false });
+  /* кілемдер */
+  B(1.5, 0, 8.5, 5.5, .02, 12.5, mat('carpet', { map: TX.carpet }), { solid: false, block: false });
+  B(2.2, H, 4.5, 5.6, H + .02, 7.5, mat('carpet', { map: TX.carpet }), { solid: false, block: false });
+  B(15, H, 9, 18.5, H + .02, 12, mat('rugk', { color: '#e6b04a' }), { solid: false, block: false });
+
+  /* сыртқы қабырғалар */
+  for (const f of [0, 1]) {
+    wall('x', 0, 0, 20, f, RM.outer, f === 0 ? [[9, 11]] : []);
+    wall('x', 14, 0, 20, f, RM.outer);
+    wall('z', 0, 0, 14, f, RM.outer);
+    wall('z', 20, 0, 14, f, RM.outer);
+  }
+  /* 1-қабат ішкі қабырғалар */
+  wall('z', 7, 0, 7, 0, RM.kitchen, [[2, 3.5]]);
+  wall('z', 7, 7, 14, 0, RM.living, [[9.5, 11]]);
+  wall('x', 7, 0, 7, 0, RM.kitchen, [[3, 4.5]]);
+  wall('z', 13, 0, 14, 0, RM.library, [[1.5, 3]]);
+  wall('z', 11, 4, 11, 0, RM.hall);
+  B(11, 0, 11, 13, 3.0, 14, RM.hall);                     // баспалдақтың асты
+  /* 2-қабат */
+  wall('z', 7, 0, 14, 1, RM.bedroom, [[9, 10.5]]);
+  wall('z', 13, 0, 14, 1, RM.study, [[1, 2.5], [11.5, 13]]);
+  wall('x', 7, 13, 20, 1, RM.study);
+  /* баспалдақ ойығының қоршауы */
+  B(10.92, H, 4, 11.08, H + 1, 11, darkWood);
+  B(11, H, 3.92, 13, H + 1, 4.08, darkWood);
+  /* баспалдақ: 14 саты, z=4 → z=11 */
+  for (let i = 0; i < 14; i++) B(11.05, 0, 4 + i * .5, 12.95, (i + 1) * H / 14, 4.5 + i * .5, i % 2 ? lightWood : woodM, { solid: false });
+
+  /* шығатын есік */
+  const door = new THREE.Group(); door.position.set(9, 0, 0);
+  const leaf = B(0, 0, -.06, 2, 2.3, .06, mat('door', { color: '#7a3b22' }), { parent: door });
+  B(.2, .3, .06, 1.8, 1.1, .08, mat('door2', { color: '#8e4a2c' }), { parent: door, solid: false });
+  B(.2, 1.3, .06, 1.8, 2.1, .08, mat('door2', { color: '#8e4a2c' }), { parent: door, solid: false });
+  B(1.75, 1.05, .06, 1.85, 1.15, .14, mat('brass', { color: '#d8b54a' }), { parent: door, solid: false });
+  scene.add(door);
+  leaf.userData.solid.x1 = 9; leaf.userData.solid.x2 = 11; leaf.userData.solid.y1 = 0; leaf.userData.solid.y2 = 2.3; leaf.userData.solid.z1 = -.06; leaf.userData.solid.z2 = .06;
+  HOUSE.door = door; HOUSE.doorSolid = leaf.userData.solid;
+  /* код құлпы */
+  HOUSE.keypad = B(11.15, 1.1, .08, 11.55, 1.6, .16, mat('kp', { color: '#2b2b2b' }), { solid: false });
+  HOUSE.kpLed = new THREE.Mesh(new THREE.PlaneGeometry(.28, .1), new THREE.MeshBasicMaterial({ color: '#c4553a' }));
+  HOUSE.kpLed.position.set(11.35, 1.5, .165); scene.add(HOUSE.kpLed);
+  plane(1.8, .45, new THREE.MeshBasicMaterial({ map: label('ШЫҒУ · код ★★★★', { size: 44 }) }), 10, 2.62, .09);
+
+  /* терезелер (сән үшін) */
+  const winM = new THREE.MeshBasicMaterial({ map: TX.sky });
+  const win = (x, z, ry, f) => { const y = f * H + 1.6; const p = plane(1.3, 1.1, winM, x, y, z, ry); const fr = mat('frame', { color: '#f2ece0' }); const g = new THREE.Group(); g.position.copy(p.position); g.rotation.y = ry; [[0, .58, 1.42, .08], [0, -.58, 1.42, .08], [-.68, 0, .08, 1.2], [.68, 0, .08, 1.2], [0, 0, .06, 1.1], [0, 0, 1.3, .06]].forEach(([a, b, w, h]) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, .05), fr); m.position.set(a, b, .02); g.add(m); }); scene.add(g); };
+  for (const f of [0, 1]) {
+    win(.09, 3.5, Math.PI / 2, f); win(.09, 11, Math.PI / 2, f);
+    win(19.91, 4, -Math.PI / 2, f); win(19.91, 10.5, -Math.PI / 2, f);
+    win(3.5, 13.91, Math.PI, f); win(16.5, 13.91, Math.PI, f);
+    win(3.5, .09, 0, f); win(16.5, .09, 0, f);
+  }
+  /* шамдар */
+  const lampM = new THREE.MeshBasicMaterial({ color: '#fff4d2' });
+  [[3.5, 3.5, 0], [3.5, 10.5, 0], [9, 7, 0], [16.5, 7, 0], [3.5, 7, 1], [9, 7, 1], [16.5, 3.5, 1], [16.5, 10.5, 1]].forEach(([x, z, f]) => {
+    const y = f === 0 ? 2.98 : 2 * H - .02;
+    const l = new THREE.Mesh(new THREE.CylinderGeometry(.35, .35, .04, 20), lampM); l.position.set(x, y, z); scene.add(l);
+  });
+
+  /* бөлме тақтайшалары */
+  const sign = (t, x, z, ry, f) => plane(1.5, .38, new THREE.MeshBasicMaterial({ map: label(t, { size: 54 }) }), x, f * H + 2.62, z, ry);
+  sign('Ас үй', 7.09, 2.75, Math.PI / 2, 0);
+  sign('Қонақ бөлме', 7.09, 10.25, Math.PI / 2, 0);
+  sign('Кітапхана', 12.91, 2.25, -Math.PI / 2, 0);
+  sign('Жатын бөлме', 7.09, 9.75, Math.PI / 2, 1);
+  sign('Жұмыс бөлмесі', 12.91, 1.75, -Math.PI / 2, 1);
+  sign('Балалар бөлмесі', 12.91, 12.25, -Math.PI / 2, 1);
+  plane(1.6, .4, new THREE.MeshBasicMaterial({ map: label('2-қабат ↑', { size: 56 }) }), 12, 2.5, 3.93, Math.PI);
+
+  furniture();
+}
+const HOUSE = {};
+
+/* ---- жиһаз ---- */
+function furniture() {
+  const F = (x1, y1, z1, x2, y2, z2, m, o) => B(x1, y1, z1, x2, y2, z2, m, o);
+  const U = H;
+  /* ас үй */
+  F(.1, 0, .5, .8, .9, 5.5, white); F(.08, .9, .45, .85, .95, 5.55, mat('ctop', { color: '#5c6a66' }));
+  F(.1, 0, 5.5, .8, .9, 6.6, mat('stove', { color: '#3a3a3a' }));
+  F(5.6, 0, .15, 6.6, 1.9, .9, mat('fridge', { color: '#e9edf0' }));
+  F(2.5, .7, 3, 4.5, .78, 4.5, lightWood); [[2.6, 3.1], [4.3, 3.1], [2.6, 4.3], [4.3, 4.3]].forEach(([x, z]) => F(x, 0, z, x + .1, .7, z + .1, darkWood, { solid: false }));
+  F(2.9, 0, 2.2, 3.4, .45, 2.7, darkWood); F(3.6, 0, 4.8, 4.1, .45, 5.3, darkWood);
+  /* қонақ бөлме */
+  F(.1, 0, 9, 1, .45, 12.5, mat('sofa', { color: '#2f5a7a' })); F(.1, 0, 9, .35, 1.05, 12.5, mat('sofa', {}));
+  F(.1, 0, 8.7, 1, .7, 9, mat('sofa', {})); F(.1, 0, 12.5, 1, .7, 12.8, mat('sofa', {}));
+  F(2.8, 0, 10, 4.2, .4, 11, darkWood);
+  F(3, 0, 13.2, 4.6, .7, 13.85, mat('kebeje', { color: '#9b5a2a' })); F(3.1, .2, 13.18, 4.5, .5, 13.2, mat('kb2', { color: '#e3a63b' }), { solid: false });
+  F(6.3, 0, 12, 6.85, 1.8, 13.8, mat('books', { map: TX.books }));
+  F(.2, 0, 7.3, .7, 1.2, 8.2, darkWood); F(.22, 1.2, 7.4, .3, 1.8, 8.1, mat('tv', { color: '#151515' }));
+  /* дәліз: негізгі үстел */
+  F(8, 0, 5.2, 10, .8, 6.2, mat('mainT', { color: '#8a5631' }));
+  F(7.5, 0, 13, 10, .45, 13.8, darkWood);
+  F(7.15, 0, .4, 7.5, 1.9, .75, darkWood, { solid: false }); // ілгіш
+  /* кітапхана */
+  F(19.4, 0, 1, 19.85, 2.4, 13, mat('books', {}), { uv: [4, 1] });
+  F(14, 0, 13.4, 19, 2.4, 13.85, mat('books', {}), { uv: [2, 1] });
+  F(15.5, .74, 6, 17.5, .8, 7, lightWood); F(15.6, 0, 6.1, 17.4, .74, 6.9, darkWood);
+  F(14, 0, 10, 15, .5, 11, mat('arm', { color: '#7a2c25' })); F(14, 0, 10.8, 15, 1.1, 11, mat('arm', {}));
+  F(17.8, 0, 11, 18.4, .6, 11.6, darkWood);
+  F(13.4, 0, 6, 14, 1.2, 9, mat('globeSt', { color: '#5b3a2a' }));
+  /* жатын бөлме */
+  F(.2, U, 1, 2.4, U + .55, 3.2, mat('bed', { color: '#f1ead9' })); F(.15, U, 1, .3, U + 1.1, 3.2, darkWood);
+  F(.4, U + .55, 1.1, 1, U + .7, 3.1, mat('pillow', { color: '#ffffff' }), { solid: false });
+  F(1.3, U + .55, 1.05, 2.4, U + .6, 3.15, mat('blanket', { color: '#b5482f' }), { solid: false });
+  F(.2, U, 3.4, .8, U + .55, 4, darkWood);
+  F(.15, U, 8, .8, U + 2.2, 10.5, mat('ward', { color: '#7c5a3c' }));
+  F(3, U, 13.3, 4.6, U + .9, 13.85, lightWood);
+  /* жұмыс бөлмесі */
+  F(17.5, U + .7, 2, 19.6, U + .76, 3.2, lightWood); F(17.6, U, 2.1, 19.5, U + .7, 3.1, darkWood);
+  F(17, U, 2.3, 17.4, U + .9, 2.9, darkWood);
+  F(15, U, .15, 18, U + 1.6, .6, mat('books', {}), { uv: [1.5, 1] });
+  F(13.3, U, 4.5, 13.8, U + 1.4, 6.5, mat('cab', { color: '#5f7d4e' }));
+  /* балалар бөлмесі */
+  F(18, U, 8, 19.8, U + .5, 10, mat('kbed', { color: '#f4c95d' })); F(19.6, U, 8, 19.8, U + .9, 10, mat('kbed2', { color: '#3d8bd9' }));
+  F(14, U, 13.2, 15, U + .5, 13.85, mat('toy', { color: '#c4553a' }));
+  [[16, 10.1, '#3d8bd9'], [16.3, 10.6, '#f4c95d'], [15.6, 10.8, '#6fcf5a']].forEach(([x, z, c]) => F(x, U, z, x + .3, U + .3, z + .3, mat('blk' + c, { color: c }), { solid: false }));
+  F(19.3, U, 12.5, 19.85, U + 1.6, 13.7, mat('kshelf', { color: '#e2763a' }));
+  /* жоғарғы дәліз */
+  F(7.2, U, 5, 7.6, U + .8, 6.5, darkWood);
+  F(9.7, U, 13.3, 10.6, U + 1.1, 13.8, mat('pot', { color: '#a35c3a' }));
+  const plant = new THREE.Mesh(new THREE.SphereGeometry(.55, 8, 6), mat('leaf', { color: '#4f8a3f' })); plant.position.set(10.15, U + 1.5, 13.55); scene.add(plant);
+
+  /* үстелдегі 4 орын — нөмірлері бар дөңгелек */
+  HOUSE.mats = [];
+  for (let i = 0; i < 4; i++) {
+    const x = 9.7 - i * .46;   // кірген адамға солдан оңға: 1,2,3,4
+    const m = new THREE.Mesh(new THREE.CircleGeometry(.19, 24), new THREE.MeshBasicMaterial({ map: cnv(64, 64, (g) => { g.fillStyle = '#f4ead8'; g.beginPath(); g.arc(32, 32, 31, 0, 7); g.fill(); g.fillStyle = '#7a3b22'; g.font = '800 40px Rubik,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(i + 1, 32, 34); }) }));
+    m.rotation.x = -Math.PI / 2; m.position.set(x, .805, 5.65); scene.add(m);
+    HOUSE.mats.push(new THREE.Vector3(x, .81, 5.75));
+  }
+}
+
+/* ---------- заттар ---------- */
+const ITEM_TYPES = {
+  globe: { name: 'Глобус', make() { const g = new THREE.Group(); const s = new THREE.Mesh(new THREE.SphereGeometry(.15, 16, 12), new THREE.MeshLambertMaterial({ map: cnv(128, 64, (c, w, h) => { c.fillStyle = '#2f78b7'; c.fillRect(0, 0, w, h); c.fillStyle = '#6fae4a'; for (let i = 0; i < 9; i++) { c.beginPath(); c.ellipse(rnd(0, w), rnd(10, 54), rnd(6, 18), rnd(4, 12), rnd(0, 3), 0, 7); c.fill(); } }) })); s.position.y = .3; g.add(s); const st = new THREE.Mesh(new THREE.CylinderGeometry(.03, .09, .15, 10), mat('brass', {})); st.position.y = .075; g.add(st); const r = new THREE.Mesh(new THREE.TorusGeometry(.17, .012, 6, 24, Math.PI), mat('brass', {})); r.position.y = .3; r.rotation.z = Math.PI / 2; g.add(r); return g; } },
+  clock: { name: 'Сағат', make() { const g = new THREE.Group(); const f = new THREE.Mesh(new THREE.CylinderGeometry(.16, .16, .05, 24), [mat('clk', { color: '#7a3b22' }), new THREE.MeshLambertMaterial({ map: cnv(128, 128, (c) => { c.fillStyle = '#f7f1e3'; c.beginPath(); c.arc(64, 64, 62, 0, 7); c.fill(); c.fillStyle = '#222'; c.font = '600 18px Rubik,sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; for (let i = 1; i <= 12; i++) { const a = i / 12 * Math.PI * 2; c.fillText(i, 64 + Math.sin(a) * 48, 64 - Math.cos(a) * 48); } c.lineWidth = 5; c.strokeStyle = '#222'; c.beginPath(); c.moveTo(64, 64); c.lineTo(64, 30); c.moveTo(64, 64); c.lineTo(88, 72); c.stroke(); }) }), mat('clk', {})]); f.rotation.x = Math.PI / 2; f.position.y = .17; g.add(f); const b = new THREE.Mesh(new THREE.BoxGeometry(.2, .03, .08), mat('clk', {})); b.position.y = .015; g.add(b); return g; } },
+  book: { name: 'Кітап', make() { const g = new THREE.Group(); const c = new THREE.Mesh(new THREE.BoxGeometry(.3, .07, .22), mat('bookc', { color: '#7a2c25' })); c.position.y = .035; g.add(c); const p = new THREE.Mesh(new THREE.BoxGeometry(.28, .055, .23), white); p.position.set(.01, .035, 0); g.add(p); const s = new THREE.Mesh(new THREE.BoxGeometry(.05, .02, .23), mat('brass', {})); s.position.set(-.1, .072, 0); g.add(s); return g; } },
+  dombra: { name: 'Домбыра', make() { const g = new THREE.Group(); const body = new THREE.Mesh(new THREE.SphereGeometry(.15, 14, 10), mat('domb', { color: '#a5642e' })); body.scale.set(1, .35, 1.3); body.position.y = .06; g.add(body); const n = new THREE.Mesh(new THREE.BoxGeometry(.05, .04, .6), mat('domb2', { color: '#6b3b1c' })); n.position.set(0, .07, -.45); g.add(n); const h = new THREE.Mesh(new THREE.BoxGeometry(.06, .05, .1), mat('domb2', {})); h.position.set(0, .07, -.78); g.add(h); return g; } },
+  kese: { name: 'Кесе', make() { const g = new THREE.Group(); const k = new THREE.Mesh(new THREE.CylinderGeometry(.1, .055, .08, 18, 1, true), new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, map: cnv(128, 32, (c, w, h) => { c.fillStyle = '#fbfaf5'; c.fillRect(0, 0, w, h); c.fillStyle = '#2a5ea8'; c.fillRect(0, 4, w, 6); for (let i = 0; i < 8; i++) { c.beginPath(); c.arc(i * 16 + 8, 22, 4, 0, 7); c.fill(); } }) })); k.position.y = .06; g.add(k); const s = new THREE.Mesh(new THREE.CylinderGeometry(.14, .12, .015, 20), white); s.position.y = .008; g.add(s); return g; } },
+  compass: { name: 'Компас', make() { const g = new THREE.Group(); const b = new THREE.Mesh(new THREE.CylinderGeometry(.11, .11, .04, 22), mat('brass', {})); b.position.y = .02; g.add(b); const f = new THREE.Mesh(new THREE.CircleGeometry(.09, 22), white); f.rotation.x = -Math.PI / 2; f.position.y = .041; g.add(f); const n = new THREE.Mesh(new THREE.ConeGeometry(.02, .16, 4), mat('ndl', { color: '#c4553a' })); n.rotation.x = Math.PI / 2; n.position.y = .05; g.add(n); return g; } }
+};
+mat('brass', { color: '#d8b54a' });
+
+/* жасыратын орындар: [x, y, z, қабат, бөлме] */
+const SPOTS = [
+  [.45, .95, 1.6, 0, 'kitchen'], [.45, .95, 4.4, 0, 'kitchen'], [3.5, .78, 3.75, 0, 'kitchen'], [6.1, 0, 1.4, 0, 'kitchen'],
+  [3.5, .4, 10.5, 0, 'living'], [3.8, .7, 13.5, 0, 'living'], [6.1, 0, 7.6, 0, 'living'], [.55, .45, 10.6, 0, 'living'],
+  [16.5, .8, 6.5, 0, 'library'], [18.1, .6, 11.3, 0, 'library'], [14.4, 0, 11.6, 0, 'library'], [13.7, 1.2, 7.5, 0, 'library'], [18.6, 0, .6, 0, 'library'],
+  [1.6, H + .55, 2.1, 1, 'bedroom'], [.5, H + .55, 3.7, 1, 'bedroom'], [3.8, H + .9, 13.55, 1, 'bedroom'], [1.2, H, 9.2, 1, 'bedroom'],
+  [18.5, H + .76, 2.6, 1, 'study'], [19.4, H, 6.4, 1, 'study'], [13.55, H + 1.4, 5.5, 1, 'study'],
+  [14.5, H + .5, 13.5, 1, 'kids'], [18.9, H + .5, 9, 1, 'kids'], [16.6, H + .02, 11.4, 1, 'kids'],
+  [7.4, H + .8, 5.75, 1, 'hall2']
+];
+
+/* санды жасыратын мысал: нәтижесі әрдайым d */
+function puzzle(d) {
+  const t = [];
+  t.push(() => { const a = ri(0, d), b = d - a; return `${a} + ${b}`; });
+  t.push(() => { const b = ri(2, 9); return `${d + b} − ${b}`; });
+  t.push(() => { const b = ri(2, 5); return `${d * b} ÷ ${b}`; });
+  t.push(() => { for (let k = 0; k < 20; k++) { const a = ri(2, 5), b = ri(2, 5); if (a * b >= d && a * b - d <= 15) return `${a} × ${b} − ${a * b - d}`; } return `${d} × 1`; });
+  t.push(() => { const a = ri(2, 4); return a * a >= d ? `${a}² − ${a * a - d}` : `${a}² + ${d - a * a}`; });
+  if (d > 0) t.push(() => { const tt = ri(2, 5); return `v = ${d * tt} м ÷ ${tt} с`; });
+  return pick(t)();
+}
+
+/* ---------- ойыншылар ---------- */
+const P = [0, 1].map(i => ({
+  slot: i + 1, color: COLORS[i], pid: null, kb: false, here: false, lastSeen: 0,
+  x: 0, y: 0, z: 0, yaw: 0, pitch: 0, jx: 0, jy: 0, lastIn: 0,
+  hold: null, crouch: false, frozen: false, prompt: '', keypad: false,
+  cam: new THREE.PerspectiveCamera(68, 1, .05, 120), avatar: null, sent: '', sentAt: 0
+}));
+function makeAvatar(p, i) {
+  const g = new THREE.Group();
+  const col = mat('av' + i, { color: p.color });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(.24, .3, 1.05, 12), col); body.position.y = .62; g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(.2, 14, 10), mat('skin', { color: '#e7b98f' })); head.position.y = 1.36; g.add(head);
+  /* тақия — ою-түсті */
+  const hat = new THREE.Mesh(new THREE.CylinderGeometry(.13, .2, .14, 12), mat('hat' + i, { color: i ? '#7a2c25' : '#1f3d5c' })); hat.position.y = 1.53; g.add(hat);
+  const eyeM = mat('eye', { color: '#1a1a1a' });
+  [-.07, .07].forEach(x => { const e = new THREE.Mesh(new THREE.SphereGeometry(.03, 6, 6), eyeM); e.position.set(x, 1.4, -.18); g.add(e); });
+  const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: cnv(64, 64, (c) => { c.fillStyle = p.color; c.beginPath(); c.arc(32, 32, 30, 0, 7); c.fill(); c.fillStyle = '#fff'; c.font = '800 38px Rubik,sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(p.slot, 32, 34); }) }));
+  tag.scale.set(.3, .3, 1); tag.position.y = 1.95; g.add(tag);
+  g.traverse(o => o.layers.set(1 + i));
+  scene.add(g); return g;
+}
+P.forEach((p, i) => {
+  p.avatar = makeAvatar(p, i);
+  p.cam.rotation.order = 'YXZ';
+  p.cam.layers.enable(0); p.cam.layers.enable(2 - i); /* басқаның денесін көреді, өзінікін емес */
+  p.cam.layers.disable(1 + i);
+  scene.add(p.cam);
+});
+const active = () => P.filter(p => p.pid);
+const humans = () => P.filter(p => p.pid && !p.bot);       // компьютер-ойыншысыз
+const nm = p => p.bot ? 'Компьютер' : p.slot + '-ойыншы';
+function dropBots() { P.forEach(p => { if (p.bot) { p.bot = false; p.pid = null; p.frozen = false; } }); }
+
+function spawn(p, x, z, yaw) { p.x = x; p.z = z; p.y = 0; p.yaw = yaw; p.pitch = 0; p.jx = p.jy = 0; p.crouch = false; }
+
+/* ---------- қозғалыс және соқтығысу ---------- */
+function groundY(p) {
+  if (p.x > 11 && p.x < 13 && p.z > 4 && p.z < 11) return H * (p.z - 4) / 7;
+  return p.y > H / 2 ? H : 0;
+}
+function collide(p) {
+  const r = .3, b0 = p.y + .3, b1 = p.y + 1.7;
+  for (let it = 0; it < 3; it++) for (const s of solids) {
+    if (s.off || s.y2 <= b0 || s.y1 >= b1) continue;
+    const cx = Math.max(s.x1, Math.min(p.x, s.x2)), cz = Math.max(s.z1, Math.min(p.z, s.z2));
+    let dx = p.x - cx, dz = p.z - cz; const d2 = dx * dx + dz * dz;
+    if (d2 >= r * r) continue;
+    if (d2 < 1e-6) { /* орталығы қораптың ішінде — ең жақын шетке шығарамыз */
+      const opts = [[s.x1 - r - p.x, 0], [s.x2 + r - p.x, 0], [0, s.z1 - r - p.z], [0, s.z2 + r - p.z]].sort((a, b) => Math.abs(a[0] + a[1]) - Math.abs(b[0] + b[1]));
+      p.x += opts[0][0]; p.z += opts[0][1]; continue;
+    }
+    const d = Math.sqrt(d2); p.x += dx / d * (r - d); p.z += dz / d * (r - d);
+  }
+}
+function move(p, dt) {
+  if (p.frozen) return;
+  if (p.pid && !p.kb && performance.now() - p.lastIn > 600) { p.jx = p.jy = 0; }
+  const sp = (p.crouch ? 1.6 : 3.1) * dt;
+  const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw), rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
+  let mx = fx * -p.jy + rx * p.jx, mz = fz * -p.jy + rz * p.jx;
+  const l = Math.hypot(mx, mz); if (l > 1) { mx /= l; mz /= l; }
+  const steps = 3;
+  for (let i = 0; i < steps; i++) { p.x += mx * sp / steps; p.z += mz * sp / steps; collide(p); p.y = groundY(p); }
+  p.x = Math.max(-12, Math.min(32, p.x)); p.z = Math.max(-24, Math.min(14, p.z));
+  p.walk = (p.walk || 0) + l * dt * 9;
+}
+function placeCam(p) {
+  const eye = p.crouch ? .95 : 1.6;
+  p.cam.position.set(p.x, p.y + eye + Math.sin(p.walk || 0) * .03, p.z);
+  p.cam.rotation.set(p.pitch, p.yaw, 0);
+  p.avatar.position.set(p.x, p.y, p.z); p.avatar.rotation.y = p.yaw;
+  p.avatar.scale.y = p.crouch ? .6 : 1;
+  p.avatar.visible = !!p.pid;
+}
+function floorOf(p) { return p.y > H / 2 ? 1 : 0; }
+
+/* ---------- ойын күйі ---------- */
+const G = { phase: 'lobby', mode: 'quest', t: 0, items: [], slots: [], code: '', doorOpen: false, doorAng: 0, hide: null, score: [0, 0], round: 0 };
+
+/* ---------- квест ---------- */
+function startQuest() {
+  G.items.forEach(it => { it.mesh.parent && it.mesh.parent.remove(it.mesh); scene.remove(it.halo); });
+  const types = shuffle(Object.keys(ITEM_TYPES)).slice(0, 4);
+  /* екі зат төменде, екеуі жоғарыда; бір бөлмеде екі зат болмайды */
+  const pickSpots = f => { const used = new Set(); return shuffle(SPOTS.filter(s => s[3] === f)).filter(s => !used.has(s[4]) && used.add(s[4])).slice(0, 2); };
+  const spots = shuffle([...pickSpots(0), ...pickSpots(1)]);
+  G.items = types.map((k, i) => {
+    const d = ri(0, 9), mesh = ITEM_TYPES[k].make();
+    const s = spots[i]; mesh.position.set(s[0], s[1] + .01, s[2]); mesh.rotation.y = rnd(0, 6.28); scene.add(mesh);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: TX.halo, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    halo.scale.set(.7, .7, 1); halo.position.set(s[0], s[1] + .3, s[2]); scene.add(halo);
+    return { key: k, name: ITEM_TYPES[k].name, d, pz: puzzle(d), mesh, halo, home: s, slot: -1, holder: null };
+  });
+  G.slots = shuffle([0, 1, 2, 3]);        // slots[i] = i-орынға қай зат келеді
+  G.items.forEach((it, i) => it.target = G.slots.indexOf(i));
+  G.code = G.slots.map(i => G.items[i].d).join('');
+  G.doorOpen = false; G.doorAng = 0; HOUSE.doorSolid.off = false; HOUSE.door.rotation.y = 0;
+  HOUSE.kpLed.material.color.set('#c4553a');
+  const ps = active();
+  ps.forEach((p, i) => { spawn(p, ps.length === 2 ? 9.5 - i : 10, 1.5, Math.PI); p.hold = null; p.frozen = false; });
+  G.t = 0; G.phase = 'play'; G.mode = 'quest';
+  drawTableHud();
+  toast('Төрт затты тауып, үстелге әкеліңдер!', 3500);
+}
+function drawTableHud() {
+  const box = $('tableHud'); box.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const it = G.items[G.slots[i]], on = it.slot >= 0;
+    const d = document.createElement('div'); d.className = 'slot' + (on ? ' on' : '');
+    d.innerHTML = `<div class="n">${i + 1}-ОРЫН</div><div class="nm">${it.name}</div><div class="pz">${on ? it.pz : '?'}</div>`;
+    box.appendChild(d);
+  }
+}
+const nearTable = p => floorOf(p) === 0 && p.x > 7.3 && p.x < 10.7 && p.z > 4.4 && p.z < 7.1;
+const nearDoor = p => floorOf(p) === 0 && p.z < 1.9 && p.x > 8.3 && p.x < 12 && !G.doorOpen;
+function lookingAt(p, x, z, cone = .55) { const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz) || 1; return (-Math.sin(p.yaw) * dx - Math.cos(p.yaw) * dz) / d > cone; }
+function itemNear(p) {
+  let best = null, bd = 2.0;
+  for (const it of G.items) {
+    if (it.holder || it.slot >= 0) continue;
+    if ((it.home[3]) !== floorOf(p)) continue;
+    const d = Math.hypot(it.mesh.position.x - p.x, it.mesh.position.z - p.z);
+    if (d < bd && (d < .9 || lookingAt(p, it.mesh.position.x, it.mesh.position.z, .3))) { bd = d; best = it; }
+  }
+  return best;
+}
+function questPrompt(p) {
+  if (nearDoor(p) && lookingAt(p, 10, 0, .2)) return 'Код терү';
+  if (p.hold && nearTable(p)) return 'Үстелге қою';
+  if (!p.hold && itemNear(p)) return 'Алу';
+  if (p.hold) return 'Жерге қою';
+  return '';
+}
+function questAct(p) {
+  const a = questPrompt(p);
+  if (a === 'Код терү') { p.keypad = true; if (p.kb) openPanelKp(p); }
+  else if (a === 'Алу') {
+    const it = itemNear(p); it.holder = p; p.hold = it; scene.remove(it.halo);
+    p.cam.add(it.mesh); it.mesh.position.set(.28, -.32, -.6); it.mesh.rotation.set(.3, .6, 0); it.mesh.scale.setScalar(.8);
+    SFX.pick(); fx(p, 40); toast(`${p.slot}-ойыншы: «${it.name}» табылды!`);
+  } else if (a === 'Үстелге қою') {
+    const it = p.hold; p.hold = null; it.holder = null; it.slot = it.target;
+    p.cam.remove(it.mesh); scene.add(it.mesh); it.mesh.scale.setScalar(1);
+    const m = HOUSE.mats[it.target]; it.mesh.position.copy(m); it.mesh.rotation.set(0, Math.PI, 0);
+    SFX.place(); fx(p, [40, 30, 40]); drawTableHud();
+    const n = G.items.filter(i => i.slot >= 0).length;
+    toast(n === 4 ? 'Барлығы орнында! Есептерді шығарып, есікке барыңдар.' : `${it.target + 1}-орынға қойылды. Тағы ${4 - n} зат қалды.`, 3200);
+  } else if (a === 'Жерге қою') {
+    const it = p.hold; p.hold = null; it.holder = null;
+    p.cam.remove(it.mesh); scene.add(it.mesh); it.mesh.scale.setScalar(1); it.mesh.rotation.set(0, rnd(0, 6), 0);
+    const x = p.x - Math.sin(p.yaw) * .6, z = p.z - Math.cos(p.yaw) * .6;
+    it.mesh.position.set(x, groundY(p) + .01, z); it.home = [x, groundY(p), z, floorOf(p), ''];
+    it.halo.position.set(x, it.home[1] + .3, z); scene.add(it.halo);
+  }
+}
+function tryCode(p, v) {
+  if (G.phase !== 'play' || G.mode !== 'quest') return;
+  const placed = G.items.every(i => i.slot >= 0);
+  if (v === G.code) {
+    G.doorOpen = true; HOUSE.doorSolid.off = true; HOUSE.kpLed.material.color.set('#6fcf5a');
+    P.forEach(q => q.keypad = false); closePanelKp();
+    SFX.open(); toast('Есік ашылды! Сыртқа шығыңдар!', 4000);
+    send(p, { t: 'codeRes', ok: true });
+  } else {
+    SFX.wrong(); send(p, { t: 'codeRes', ok: false });
+    toast(placed ? 'Код қате. Орындардың ретін тексеріңдер!' : 'Код қате. Әлі барлық зат үстелде емес.');
+  }
+}
+function questUpdate(dt) {
+  G.t += dt;
+  G.items.forEach((it, i) => { if (!it.holder && it.slot < 0) { it.halo.material.opacity = .55 + Math.sin(G.t * 3 + i) * .35; } });
+  if (G.doorOpen && G.doorAng < 1.6) { G.doorAng += dt * 1.2; HOUSE.door.rotation.y = Math.min(1.6, G.doorAng); }
+  if (G.doorOpen && active().some(p => p.z < -1.2)) {
+    G.phase = 'end'; SFX.found();
+    showEnd('Құтылдыңдар!', `Есіктің коды — <b>${G.code}</b>. Уақыт: <b>${fmt(G.t)}</b>.<br>` + G.slots.map((s, i) => `${i + 1}) ${G.items[s].name}: ${G.items[s].pz} = ${G.items[s].d}`).join('<br>'));
+  }
+}
+
+/* ---------- жасырынбақ ---------- */
+const HIDE_T = 25, SEEK_T = 120;
+/* компьютер тығылатын жерлер: [x, y, z, отыр ма] */
+const BOT_SPOTS = [
+  [3.0, 0, 5.1, true], [1.3, 0, 13.3, true], [5.4, 0, 13.4, true], [6.1, 0, 7.6, false],
+  [14.4, 0, 11.6, true], [18.6, 0, .6, true], [16.5, 0, 7.5, true], [19, 0, 12.6, true],
+  [1.3, H, .5, true], [.5, H, 10.9, false], [2.5, H, 13.4, true],
+  [18.5, H, 3.7, true], [19.3, H, 6.4, true], [19.3, H, 10.6, true], [15.4, H, 13.3, true], [10.4, H, 12.7, true]
+];
+function startHide(next) {
+  G.items.forEach(it => { it.mesh.parent && it.mesh.parent.remove(it.mesh); scene.remove(it.halo); }); G.items = [];
+  if (!next) { G.score = [0, 0]; G.round = 0; }
+  G.mode = 'hide'; G.phase = 'play';
+  G.doorOpen = false; HOUSE.doorSolid.off = false; HOUSE.door.rotation.y = 0;
+  const hs = humans();
+  G.solo = hs.length === 1;
+  if (G.solo) { const b = P.find(p => p !== hs[0]); b.pid = 'bot'; b.bot = true; b.kb = false; }
+  const seeker = G.solo ? hs[0].slot - 1 : G.round % 2, hider = 1 - seeker;
+  G.hide = { seeker, hider, stage: 'hide', t: G.solo ? 6 : HIDE_T, lastTick: 0 };
+  spawn(P[seeker], 10, 1.2, 0);              // есікке қарап тұрады
+  spawn(P[hider], 9.5, 4, Math.PI);
+  P.forEach(p => { p.hold = null; p.keypad = false; });
+  P[seeker].frozen = true; P[hider].frozen = false;
+  if (G.solo) {
+    /* компьютер бірден бір жасырын жерге отырады */
+    const sp = pick(BOT_SPOTS.filter(b => b !== G.lastSpot)); G.lastSpot = sp;
+    const b = P[hider]; spawn(b, sp[0], sp[2], rnd(0, 6.28)); b.y = sp[1]; b.crouch = sp[3]; b.frozen = true;
+    toast('Компьютер үйдің бір жеріне тығылды. Көзіңді жұм!', 3500);
+  } else toast(`${P[hider].slot}-ойыншы тығылады, ${P[seeker].slot}-ойыншы көзін жұмады!`, 3500);
+}
+function canSee(s, h) {
+  if (floorOf(s) !== floorOf(h)) return false;
+  const tx = h.x, ty = h.y + (h.crouch ? .6 : 1.1), tz = h.z;
+  const d = Math.hypot(tx - s.x, tz - s.z);
+  if (d < 1.3) return true;
+  if (d > 7 || !lookingAt(s, tx, tz, .82)) return false;
+  const o = s.cam.position.clone(), dir = new THREE.Vector3(tx, ty, tz).sub(o), len = dir.length();
+  const rc = new THREE.Raycaster(o, dir.normalize(), 0, len - .3);
+  return rc.intersectObjects(blockers, false).length === 0;
+}
+function hideUpdate(dt) {
+  const h = G.hide, S = P[h.seeker], Hd = P[h.hider];
+  h.t -= dt;
+  if (h.stage === 'hide') {
+    if (h.t < 5 && Math.ceil(h.t) !== h.lastTick) { h.lastTick = Math.ceil(h.t); SFX.tick(); }
+    if (h.t <= 0) { h.stage = 'seek'; h.t = SEEK_T; S.frozen = false; Hd.frozen = true; SFX.open(); toast(`${nm(S)}, ізде! Көрсең — «Таптым!» бас.`, 3500); }
+  } else if (h.stage === 'seek') {
+    if (h.t <= 0) roundEnd(false);
+  }
+}
+function hideAct(p) {
+  const h = G.hide;
+  if (h.stage === 'hide' && p === P[h.hider]) { p.crouch = !p.crouch; return; }
+  if (h.stage === 'seek' && p === P[h.seeker]) {
+    if (canSee(p, P[h.hider])) roundEnd(true);
+    else { SFX.wrong(); fx(p, 200); toast('Ол жерде ешкім жоқ…', 1500); }
+  }
+}
+function roundEnd(found) {
+  const h = G.hide; h.stage = 'res';
+  G.score[found ? h.seeker : h.hider]++;
+  SFX.found(); P.forEach(p => fx(p, [80, 50, 80]));
+  P[h.hider].frozen = true; P[h.seeker].frozen = true;
+  showEnd(found ? `${nm(P[h.seeker])} тапты!` : `${nm(P[h.hider])} табылмады!`,
+    `${found ? 'Іздеуші ' + fmt(SEEK_T - h.t) + ' ішінде тапты.' : 'Уақыт бітті — тығылған ұтты.'}<br>Есеп: <b style="color:${COLORS[0]}">${nm(P[0])} ${G.score[0]}</b> : <b style="color:${COLORS[1]}">${G.score[1]} ${nm(P[1])}</b><br>${G.solo ? 'Келесі айналымда компьютер басқа жерге тығылады.' : 'Келесі айналымда рөлдер ауысады.'}`, true);
+}
+function hotCold(s, h) {
+  const d = Math.hypot(s.x - h.x, s.z - h.z) + (floorOf(s) !== floorOf(h) ? 6 : 0);
+  return d < 3 ? '🔥 Өте ыстық!' : d < 6 ? '♨ Жылы' : d < 10 ? '❄ Салқын' : '🧊 Суық';
+}
+
+/* ---------- экран бойынша HUD ---------- */
+function hudFor(p, el) {
+  let h = `<div class="tag"><i style="background:${p.color}">${p.slot}</i>${p.slot}-ойыншы${p.kb ? ' <small>· пернетақта</small>' : ''}</div>`;
+  if (!p.kb && !p.bot && performance.now() - p.lastSeen > 6000) h += `<div class="lost">Телефон ажырады — QR-ды қайта сканерле</div>`;
+  const blind = (big, num, small) => `<div class="blind"><b>${big}</b><span>${num}</span><small>${small}</small></div>`;
+  if (G.mode === 'hide' && G.hide && G.phase === 'play') {
+    const hd = G.hide;
+    if (hd.stage === 'hide' && p === P[hd.seeker]) return el.innerHTML = h + blind('Көзіңді жұм!', Math.ceil(hd.t), `${P[hd.hider].slot}-ойыншы тығылып жатыр…`);
+    if (hd.stage === 'seek' && p === P[hd.hider]) return el.innerHTML = h + blind('Сен тығылдың. Тыныш отыр!', fmt(hd.t), 'Іздеуші сені тапқанша қозғала алмайсың');
+    if (hd.stage === 'seek' && p === P[hd.seeker] && hd.t < SEEK_T - 40) h += `<div class="hint">${hotCold(p, P[hd.hider])}</div>`;
+    if (hd.stage === 'hide' && p === P[hd.hider]) h += `<div class="hint">Тығыл! Қалды: ${Math.ceil(hd.t)} с</div>`;
+  }
+  h += `<div class="cross"></div>`;
+  if (p.prompt) h += `<div class="prompt">${p.prompt}</div>`;
+  if (p.hold) h += `<div class="holding">Қолымда: ${p.hold.name}</div>`;
+  el.innerHTML = h;
+}
+let hudT = 0;
+function updateHud() {
+  const ps = humans(), solo = ps.length === 1;
+  [$('h1'), $('h2')].forEach((el, i) => {
+    const p = P[i]; el.hidden = !p.pid || p.bot || G.phase === 'lobby';
+    el.classList.toggle('solo', solo);
+    if (!el.hidden) hudFor(p, el);
+  });
+  $('top').hidden = G.phase === 'lobby';
+  $('tableHud').hidden = !(G.phase !== 'lobby' && G.mode === 'quest');
+  if (G.mode === 'quest') {
+    $('clock').textContent = fmt(G.t);
+    const n = G.items.filter(i => i.slot >= 0).length;
+    $('topInfo').innerHTML = `<b>Квест</b><br>Үстелде: ${n} / 4${G.doorOpen ? ' · есік ашық!' : ''}`;
+  } else if (G.hide) {
+    const hd = G.hide;
+    $('clock').textContent = hd.stage === 'res' ? '—' : fmt(hd.t);
+    $('topInfo').innerHTML = `<b>Жасырынбақ</b><br>${hd.stage === 'hide' ? 'Тығылу уақыты' : hd.stage === 'seek' ? 'Іздеу уақыты' : 'Айналым бітті'} · <span style="color:${COLORS[0]}">${G.score[0]}</span> : <span style="color:${COLORS[1]}">${G.score[1]}</span>`;
+  }
+  const kb = P.filter(p => p.kb);
+  $('kbhelp').hidden = !kb.length || G.phase === 'lobby';
+  $('kbhelp').innerHTML = kb.map(p => (p.slot === 1 ? '1: W/A/S/D — жүру, Q/E — бұрылу, R/F — жоғары/төмен, Space — әрекет, C — отыру' : '2: ↑/↓ — жүру, ←/→ — бұрылу, PgUp/PgDn — жоғары/төмен, Enter — әрекет, Shift — отыру') + (p === mouseP() ? '<br>&nbsp;&nbsp;🖱 тышқан — жан-жаққа және жоғары/төмен қарау (экранды бір рет бас, Esc — шығу)' : '')).join('<br>');
+}
+
+/* ---------- желі ---------- */
+let net = null, ROOM = null;
+try { ROOM = sessionStorage.getItem('qk_room'); } catch (e) {}
+if (!ROOM) { ROOM = Array.from({ length: 5 }, () => pick('ABCDEFGHJKMNPQRSTUVWXYZ23456789'.split(''))).join(''); try { sessionStorage.setItem('qk_room', ROOM); } catch (e) {} }
+$('roomCode').textContent = ROOM;
+
+function send(p, m) { if (net && p.pid && !p.kb && !p.bot) net.send(p.pid, Object.assign({ pid: p.pid }, m)); }
+function fx(p, v) { send(p, { t: 'fx', v }); }
+
+function padUrl() {
+  let base = location.href.split('#')[0].split('?')[0].replace(/[^/]*$/, '');
+  /* панель localhost-тан ашылса, телефонға компьютердің желідегі адресі керек */
+  const inf = net && net.info;
+  if (inf && inf.local && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) base = `http://${inf.host}:${inf.port}/`;
+  return base + 'pad.html?r=' + ROOM;
+}
+function drawQR() {
+  const url = padUrl();
+  const mk = (cell) => { const q = qrcode(0, 'M'); q.addData(url); q.make(); return q.createSvgTag({ cellSize: cell, margin: 2, scalable: true }); };
+  $('qr').innerHTML = mk(6); $('miniQR').innerHTML = mk(2);
+  if (location.protocol === 'file:') $('netState').innerHTML = '<span class="warn">Файл тікелей ашылды — телефон оған кіре алмайды. Папкадағы <b>start.bat</b> файлын іске қосыңыз (немесе сайтты GitHub Pages-тен ашыңыз).</span>';
+}
+
+function onMsg(m) {
+  if (!m.pid) return;
+  let p = P.find(q => q.pid === m.pid);
+  if (m.t === 'hello') {
+    if (!p) p = P.find(q => !q.pid || q.bot) || P.find(q => !q.kb && performance.now() - q.lastSeen > 8000);
+    if (!p) { net.send(m.pid, { t: 'full', pid: m.pid }); return; }
+    const fresh = p.pid !== m.pid;
+    p.pid = m.pid; p.kb = false; p.bot = false; p.frozen = false; p.lastSeen = performance.now();
+    net.send(p.pid, { t: 'welcome', pid: p.pid, slot: p.slot, color: p.color });
+    p.sent = '';
+    if (fresh) { SFX.join(); toast(`${p.slot}-ойыншы қосылды!`); if (G.phase === 'play' && G.mode === 'quest') spawn(p, 10, 1.5, Math.PI); }
+    lobbyRefresh(); return;
+  }
+  if (!p) return;
+  p.lastSeen = performance.now();
+  if (m.t === 'in') {
+    p.jx = +m.jx || 0; p.jy = +m.jy || 0; p.lastIn = performance.now();
+    if (!p.frozen) { p.yaw -= (m.dyaw || 0) * .006; p.pitch = Math.max(-1.2, Math.min(1.2, p.pitch - (m.dpit || 0) * .005)); }
+  } else if (m.t === 'act') action(p);
+  else if (m.t === 'crouch') { if (G.mode === 'hide' && !p.frozen) p.crouch = !p.crouch; }
+  else if (m.t === 'code') tryCode(p, String(m.v));
+  else if (m.t === 'kpClose') p.keypad = false;
+  else if (m.t === 'mode' && p.slot === 1) { selectMode(m.mode); }
+  else if (m.t === 'start' && p.slot === 1) { selectMode(m.mode); begin(); }
+}
+function action(p) {
+  if (G.phase !== 'play') return;
+  if (G.mode === 'quest') questAct(p); else hideAct(p);
+}
+
+/* әр телефонға күйін жіберу */
+function stateFor(p) {
+  const s = { t: 'st', phase: G.phase === 'lobby' ? 'lobby' : G.phase, mode: G.mode, players: humans().length, act: p.prompt, keypad: p.keypad, hold: p.hold ? p.hold.name : null };
+  if (G.phase === 'play' && G.mode === 'quest') {
+    s.timer = fmt(G.t);
+    s.msg = G.doorOpen ? 'Есік ашық — сыртқа шық!' : G.items.every(i => i.slot >= 0) ? 'Бәрі үстелде! Есептерді шығарып, есіктің кодын тер' : p.hold ? 'Затты үстелге апар (1-қабат, дәліз)' : 'Үйді арала, жарқыраған заттарды ізде';
+  } else if (G.phase === 'play' && G.hide) {
+    const h = G.hide, seeker = p === P[h.seeker];
+    s.timer = fmt(h.t); s.canCrouch = !seeker; s.crouch = p.crouch;
+    s.msg = h.stage === 'hide' ? (seeker ? 'Көзіңді жұм! Панельге қарама 🙈' : 'Тығыл! Отырып жасырынуға болады') : (seeker ? 'Ізде! Көрсең — «Таптым!»' : 'Тыныш отыр, қозғалма…');
+    if (h.stage === 'hide' && !seeker) s.act = p.crouch ? 'Тұру' : 'Отыру';
+    if (h.stage === 'seek' && seeker) s.act = 'Таптым!';
+    if (h.stage === 'res') { s.phase = 'end'; s.msg = 'Айналым бітті. Панельге қара!'; s.timer = ''; }
+  } else if (G.phase === 'end') s.msg = 'Ойын аяқталды. Панельге қара!';
+  else s.msg = p.slot === 1 ? 'Ойын түрін таңда да, баста' : 'Ойын жақында басталады';
+  return s;
+}
+function syncPads() {
+  const now = performance.now();
+  for (const p of P) {
+    if (!p.pid || p.kb || p.bot) continue;
+    const s = stateFor(p), js = JSON.stringify(s);
+    if (js !== p.sent || now - p.sentAt > 2000) { send(p, s); p.sent = js; p.sentAt = now; }
+  }
+}
+setInterval(syncPads, 150);
+
+net = NET.openPanel({ room: ROOM, onMsg, onStatus: list => {
+  if (location.protocol === 'file:') return;          // ескерту экранда қалсын
+  const on = list.filter(b => b.on), local = net && net.info && net.info.local;
+  const row = list.map(b => (b.on ? '✓ ' : '· ') + b.name).join('  ');
+  $('netState').innerHTML = on.length
+    ? `Байланыс бар. Телефонмен QR-кодты сканерлеңдер.${local ? ' Телефондар компьютермен бір Wi-Fi желісінде болсын.' : ''}<br><small>Сервер: ${row}</small>`
+    : `<span class="warn">${local ? 'Компьютердегі серверге қосыла алмадым — start.bat терезесі ашық тұр ма?' : 'Серверлерге әлі қосыла алмадым — интернетті тексеріңіз.'} Қайта байқап жатырмын…</span><br><small>${row}</small>`;
+}, onReady: () => drawQR() });
+lobbyRefresh();
+
+/* ---------- лобби ---------- */
+function selectMode(m) {
+  if (m !== 'quest' && m !== 'hide') return;
+  G.mode = m;
+  document.querySelectorAll('.mc').forEach(b => b.classList.toggle('sel', b.dataset.mode === m));
+  lobbyRefresh();
+}
+document.querySelectorAll('.mc').forEach(b => b.onclick = () => selectMode(b.dataset.mode));
+function lobbyRefresh() {
+  P.forEach((p, i) => {
+    const el = $('pl' + (i + 1)); el.classList.toggle('on', !!p.pid);
+    el.querySelector('small').textContent = p.pid ? (p.kb ? 'пернетақта' : 'телефон қосылды') : 'күтуде';
+  });
+  const n = humans().length;
+  $('startBtn').disabled = n === 0;
+  $('startBtn').textContent = n === 0 ? 'Ойыншы күтілуде' : G.mode === 'hide' && n < 2 ? 'Бастау · компьютер тығылады' : 'Бастау';
+}
+function begin() {
+  /* жасырынбақта айналым біткенде — келесі айналым */
+  if (G.mode === 'hide' && G.hide && G.hide.stage === 'res' && !$('endS').hidden) { $('againBtn').click(); return; }
+  dropBots();
+  if (!humans().length) return;
+  tone(1, .01);
+  $('lobby').hidden = true; $('endS').hidden = true;
+  if (G.mode === 'quest') startQuest(); else startHide(false);
+}
+/* ---------- толық экран ---------- */
+const docEl = document.documentElement;
+const fsReq = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
+const fsOn = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+function goFull() {
+  if (!fsReq || fsOn()) return;
+  try { const r = fsReq.call(docEl); if (r && r.catch) r.catch(() => {}); } catch (e) {}
+}
+function fsSync() {
+  const on = fsOn();
+  $('fsTxt').textContent = on ? 'Шығу' : 'Толық экран';
+  $('fsIco').setAttribute('d', on ? 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' : 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5');
+  setTimeout(resize, 60);
+}
+if (fsReq) {
+  $('fsBtn').hidden = false;
+  $('fsBtn').onclick = () => {
+    if (fsOn()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else goFull();
+    $('fsBtn').blur();          // Space/Enter батырманы қайта баспасын
+  };
+  document.addEventListener('fullscreenchange', fsSync);
+  document.addEventListener('webkitfullscreenchange', fsSync);
+}
+$('startBtn').onclick = () => { goFull(); begin(); };
+$('kbBtn').onclick = () => {
+  const p = P.find(q => !q.pid); if (!p) return toast('Екі орын да бос емес');
+  p.pid = 'kb' + p.slot; p.kb = true; p.lastSeen = performance.now(); lobbyRefresh(); SFX.join();
+};
+function showEnd(t, html, nextRound) {
+  try { document.exitPointerLock(); } catch (e) {}
+  $('endT').textContent = t; $('endP').innerHTML = html; $('endS').hidden = false;
+  $('againBtn').textContent = nextRound ? 'Келесі айналым' : 'Қайта ойнау';
+  $('againBtn').onclick = () => { $('endS').hidden = true; if (nextRound) { G.round++; startHide(true); } else begin(); };
+  if (!nextRound) G.phase = 'end';
+}
+$('menuBtn').onclick = () => { $('endS').hidden = true; G.phase = 'lobby'; G.hide = null; dropBots(); P.forEach(p => { p.frozen = false; p.hold = null; p.keypad = false; }); $('lobby').hidden = false; lobbyRefresh(); };
+
+
+/* ---------- панельдегі код тергіш (пернетақта ойыншысы үшін) ---------- */
+let pkpFor = null, pkpVal = '';
+(function () {
+  const k = $('pkp').querySelector('.keys');
+  ['1', '2', '3', '4', '5', '6', '7', '8', '9', '⌫', '0', '✓'].forEach(c => { const b = document.createElement('button'); b.textContent = c; b.onclick = () => pkpKey(c); k.appendChild(b); });
+})();
+function openPanelKp(p) { pkpFor = p; pkpVal = ''; $('pkpVal').textContent = '____'; $('pkp').hidden = false; }
+function closePanelKp() { $('pkp').hidden = true; if (pkpFor) pkpFor.keypad = false; pkpFor = null; }
+function pkpKey(c) {
+  if (c === '⌫') pkpVal = pkpVal.slice(0, -1);
+  else if (c === '✓') { if (pkpVal.length === 4) { const p = pkpFor; tryCode(p, pkpVal); if (!G.doorOpen) { pkpVal = ''; } else return; } }
+  else if (pkpVal.length < 4) pkpVal += c;
+  $('pkpVal').textContent = (pkpVal + '____').slice(0, 4);
+}
+$('pkp').addEventListener('click', e => { if (e.target.id === 'pkp') closePanelKp(); });
+
+/* ---------- пернетақта ---------- */
+const keys = {};
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (!$('pkp').hidden) { if (/^Digit\d$/.test(e.code)) pkpKey(e.code.slice(5)); else if (e.code === 'Backspace') pkpKey('⌫'); else if (e.code === 'Enter') pkpKey('✓'); else if (e.code === 'Escape') closePanelKp(); return; }
+  if (e.repeat) return;
+  const k1 = P.find(p => p.kb && p.slot === 1), k2 = P.find(p => p.kb && p.slot === 2);
+  if (k1 && e.code === 'Space') { e.preventDefault(); action(k1); }
+  if (k1 && e.code === 'KeyC' && G.mode === 'hide' && !k1.frozen) k1.crouch = !k1.crouch;
+  if (k2 && (e.code === 'Enter' || e.code === 'NumpadEnter')) action(k2);
+  if (k2 && (e.code === 'ShiftRight' || e.code === 'ShiftLeft') && G.mode === 'hide' && !k2.frozen) k2.crouch = !k2.crouch;
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+function kbInput(dt) {
+  for (const p of P) {
+    if (!p.kb || p.frozen) continue;
+    const K = p.slot === 1
+      ? { f: 'KeyW', b: 'KeyS', l: 'KeyA', r: 'KeyD', tl: 'KeyQ', tr: 'KeyE', up: 'KeyR', dn: 'KeyF' }
+      : { f: 'ArrowUp', b: 'ArrowDown', tl: 'ArrowLeft', tr: 'ArrowRight', up: 'PageUp', dn: 'PageDown' };
+    const k = c => keys[c] ? 1 : 0;
+    p.jy = k(K.b) - k(K.f); p.jx = K.l ? k(K.r) - k(K.l) : 0;
+    p.yaw += (k(K.tl) - k(K.tr)) * 2.2 * dt;
+    lookBy(p, 0, (k(K.dn) - k(K.up)) * 1.5 * dt / .0025);
+  }
+}
+function lookBy(p, dx, dy) {
+  p.yaw -= dx * .0025;
+  p.pitch = Math.max(-1.25, Math.min(1.25, p.pitch - dy * .0025));
+}
+
+/* тышқан: бірінші пернетақта ойыншысын басқарады.
+   Экранды бір рет бассаң — курсор жасырылып, тышқанмен жан-жаққа және жоғары/төмен қарайсың (Esc — шығу).
+   Курсор құлыпталмаса (кейбір панельдер) — басып тұрып сүйре. */
+const mouseP = () => P.find(p => p.kb && p.slot === 1) || P.find(p => p.kb);
+let dragging = false;
+canvas.addEventListener('mousedown', () => {
+  if (G.phase !== 'play' || !mouseP()) return;
+  dragging = true;
+  if (canvas.requestPointerLock && document.pointerLockElement !== canvas) { try { const r = canvas.requestPointerLock(); r && r.catch && r.catch(() => {}); } catch (e) {} }
+});
+addEventListener('mouseup', () => { dragging = false; });
+addEventListener('mousemove', e => {
+  const p = mouseP();
+  if (!p || p.frozen || G.phase !== 'play') return;
+  if (document.pointerLockElement === canvas || dragging) lookBy(p, e.movementX || 0, e.movementY || 0);
+});
+
+/* ---------- цикл ---------- */
+const lobbyCam = new THREE.PerspectiveCamera(60, 1, .05, 120); lobbyCam.rotation.order = 'YXZ';
+let last = performance.now();
+function resize() { renderer.setSize(innerWidth, innerHeight, false); }
+addEventListener('resize', resize); resize();
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  const W = innerWidth, Hh = innerHeight;
+  renderer.setScissorTest(true);
+
+  if (G.phase === 'lobby') {
+    /* лобби артында үйдің ішін баяу айналып көрсетеміз */
+    const a = now / 9000;
+    lobbyCam.position.set(9 + Math.sin(a) * 1.2, 2.2, 7 + Math.cos(a) * 1.2); lobbyCam.rotation.set(-.12, a * 1.6, 0);
+    lobbyCam.aspect = W / Hh; lobbyCam.updateProjectionMatrix();
+    renderer.setViewport(0, 0, W, Hh); renderer.setScissor(0, 0, W, Hh); renderer.render(scene, lobbyCam);
+    return;
+  }
+
+  kbInput(dt);
+  const ps = active();
+  if (G.phase === 'play') {
+    ps.forEach(p => move(p, dt));
+    if (G.mode === 'quest') questUpdate(dt); else hideUpdate(dt);
+    ps.forEach(p => { p.prompt = G.mode === 'quest' ? questPrompt(p) : (G.hide && G.hide.stage === 'seek' && p === P[G.hide.seeker] ? 'Таптым!' : ''); });
+  } else ps.forEach(p => p.prompt = '');
+  P.forEach(placeCam);
+
+  const vs = humans();
+  const views = vs.length === 1 ? [[vs[0], 0, W]] : vs.map((p, i) => [p, i * W / 2, W / 2]);
+  for (const [p, x, w] of views) {
+    p.cam.aspect = w / Hh; p.cam.updateProjectionMatrix();
+    renderer.setViewport(x, 0, w, Hh); renderer.setScissor(x, 0, w, Hh);
+    renderer.render(scene, p.cam);
+  }
+  if ((hudT += dt) > .1) { hudT = 0; updateHud(); }
+}
+
+buildHouse();
+requestAnimationFrame(frame);
+window.__g = { G, P, HOUSE, solids, BOT_SPOTS, collide, begin, startQuest, startHide, tryCode, action, canSee };
+</script>
+</body>
+</html>
